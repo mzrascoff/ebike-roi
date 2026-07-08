@@ -1,0 +1,417 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { STATES, getState } from "@/lib/states";
+import { computeRoi, formatCo2Lbs, formatPayback, formatUsd } from "@/lib/roi";
+import RoiChart from "@/components/RoiChart";
+
+export default function Page() {
+  const [stateCode, setStateCode] = useState<string>("CA");
+  const [gasPrice, setGasPrice] = useState<number>(4.5);
+
+  const [mpg, setMpg] = useState<number>(28);
+  const [ebikePrice, setEbikePrice] = useState<number>(2000);
+  // null = follow the state's default; a number once the user hand-edits it,
+  // so switching states later doesn't clobber their edit.
+  const [kwhPriceOverride, setKwhPriceOverride] = useState<number | null>(null);
+  const kwhPrice = kwhPriceOverride ?? getState(stateCode)?.kwhPrice ?? 0.16;
+  const [dailyMiles, setDailyMiles] = useState<number>(15);
+  const [replaceablePct, setReplaceablePct] = useState<number>(70); // percent
+  const [daysPerWeek, setDaysPerWeek] = useState<5 | 6 | 7>(7);
+  const [whPerMile, setWhPerMile] = useState<number>(20);
+  const [carOwnershipCostPerMile, setCarOwnershipCostPerMile] = useState<number>(0.5);
+  const [ebikeAnnualUpkeep, setEbikeAnnualUpkeep] = useState<number>(150);
+  const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
+
+  const result = useMemo(
+    () =>
+      computeRoi({
+        ebikePrice,
+        gasPrice,
+        mpg,
+        kwhPrice,
+        whPerMile,
+        dailyMiles,
+        replaceablePct: replaceablePct / 100,
+        daysPerWeek,
+        carOwnershipCostPerMile,
+        ebikeAnnualUpkeep,
+      }),
+    [
+      ebikePrice,
+      gasPrice,
+      mpg,
+      kwhPrice,
+      whPerMile,
+      dailyMiles,
+      replaceablePct,
+      daysPerWeek,
+      carOwnershipCostPerMile,
+      ebikeAnnualUpkeep,
+    ],
+  );
+
+  const paysBack = result.annualSavings > 0;
+
+  return (
+    <main className="min-h-screen bg-paper text-ink p-4 sm:p-8">
+      <div className="max-w-6xl mx-auto">
+        <header className="mb-8 sm:mb-10">
+          <p className="eyebrow mb-4">Transportation economics</p>
+          <h1 className="font-display text-3xl font-light leading-tight tracking-tight text-ink sm:text-5xl">
+            E-Bike ROI Calculator
+          </h1>
+          <p className="mt-4 max-w-2xl font-serif text-lg leading-relaxed text-muted">
+            How long until an e-bike pays for itself in saved gas,
+            maintenance, insurance, and depreciation? Pick your state, tune
+            the inputs, and watch the payback line.
+          </p>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* INPUTS */}
+          <section className="bg-white rounded-xl shadow-sm border border-line p-6 space-y-5">
+            <h2 className="font-display text-lg font-medium tracking-tight text-ink">
+              Inputs
+            </h2>
+
+            <Field id="state" label="State">
+              <select
+                id="state"
+                value={stateCode}
+                onChange={(e) => setStateCode(e.target.value)}
+                className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+              >
+                {STATES.map((s) => (
+                  <option key={s.code} value={s.code}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field
+              id="gas-price"
+              label="Gas price"
+              suffix="$/gal"
+              caption="What you're currently paying per gallon."
+            >
+              <NumInput id="gas-price" value={gasPrice} step={0.01} min={0} onChange={setGasPrice} />
+            </Field>
+
+            <Field id="mpg" label="Car fuel economy" suffix="MPG">
+              <NumInput id="mpg" value={mpg} step={1} min={1} onChange={setMpg} />
+            </Field>
+
+            <Field id="ebike-price" label="E-bike price" suffix="$">
+              <NumInput id="ebike-price" value={ebikePrice} step={50} min={0} onChange={setEbikePrice} />
+            </Field>
+
+            <Field
+              id="kwh-price"
+              label="Electricity price"
+              suffix="$/kWh"
+              caption={`Pre-filled with the residential average for ${getState(stateCode)?.name ?? "your state"}.`}
+            >
+              <NumInput
+                id="kwh-price"
+                value={kwhPrice}
+                step={0.01}
+                min={0}
+                onChange={setKwhPriceOverride}
+              />
+            </Field>
+
+            <Field id="daily-miles" label="Daily miles driven" suffix="mi/day">
+              <NumInput id="daily-miles" value={dailyMiles} step={1} min={0} onChange={setDailyMiles} />
+            </Field>
+
+            <Field
+              id="replaceable-pct"
+              label={`Replaceable by e-bike: ${replaceablePct}%`}
+              caption="What share of your driving an e-bike could realistically take over. 100% = mostly short commutes/errands. 30% = lots of highway or family hauling."
+            >
+              <input
+                id="replaceable-pct"
+                type="range"
+                min={0}
+                max={100}
+                value={replaceablePct}
+                onChange={(e) => setReplaceablePct(parseInt(e.target.value))}
+                className="w-full accent-accent"
+              />
+            </Field>
+
+            <Field id="days-per-week" label="Days per week">
+              <div className="inline-flex rounded-md border border-line overflow-hidden">
+                {[5, 6, 7].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDaysPerWeek(d as 5 | 6 | 7)}
+                    className={`px-4 py-2 font-sans text-sm ${
+                      daysPerWeek === d
+                        ? "bg-accent text-white"
+                        : "bg-white text-ink/80 hover:bg-paper-deep"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </Field>
+
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="text-sm font-sans text-accent hover:text-accent-soft"
+            >
+              {showAdvanced ? "Hide" : "Show"} advanced
+            </button>
+            {showAdvanced && (
+              <>
+                <Field
+                  id="wh-per-mile"
+                  label="E-bike efficiency"
+                  suffix="Wh/mi"
+                  caption="A typical e-bike uses ~15–25 Wh per mile."
+                >
+                  <NumInput id="wh-per-mile" value={whPerMile} step={1} min={1} onChange={setWhPerMile} />
+                </Field>
+
+                <Field
+                  id="car-ownership-cost"
+                  label="Car ownership cost"
+                  suffix="$/mi"
+                  caption="AAA-style national average for maintenance, insurance, depreciation, and registration — beyond fuel. Applied only to the miles an e-bike replaces."
+                >
+                  <NumInput
+                    id="car-ownership-cost"
+                    value={carOwnershipCostPerMile}
+                    step={0.01}
+                    min={0}
+                    onChange={setCarOwnershipCostPerMile}
+                  />
+                </Field>
+
+                <Field
+                  id="ebike-upkeep"
+                  label="E-bike upkeep"
+                  suffix="$/year"
+                  caption="Tires, brake pads, tune-ups, and optional theft/liability insurance."
+                >
+                  <NumInput
+                    id="ebike-upkeep"
+                    value={ebikeAnnualUpkeep}
+                    step={10}
+                    min={0}
+                    onChange={setEbikeAnnualUpkeep}
+                  />
+                </Field>
+              </>
+            )}
+          </section>
+
+          {/* RESULTS */}
+          <section className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard
+                label="Payback period"
+                value={paysBack ? formatPayback(result.paybackMonths) : "Never"}
+                tone={paysBack ? "good" : "bad"}
+              />
+              <StatCard
+                label="Annual net savings"
+                value={formatUsd(result.annualSavings)}
+                tone={paysBack ? "good" : "bad"}
+              />
+              <StatCard
+                label="5-year net"
+                value={formatUsd(result.fiveYearNet)}
+                tone={result.fiveYearNet >= 0 ? "good" : "bad"}
+              />
+              <StatCard
+                label="Annual CO₂ avoided"
+                value={formatCo2Lbs(result.annualCo2SavedLbs)}
+                tone={result.annualCo2SavedLbs >= 0 ? "good" : "bad"}
+              />
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-line p-6">
+              <h2 className="font-display text-lg font-medium tracking-tight text-ink mb-2">
+                Cumulative net savings, first 5 years
+              </h2>
+              {paysBack ? (
+                <p className="text-sm text-muted mb-3">
+                  Crossing the dashed line at $0 is when the e-bike has paid
+                  for itself in fuel, maintenance, insurance, and
+                  depreciation savings, net of its own upkeep.
+                </p>
+              ) : (
+                <p className="text-sm text-accent mb-3">
+                  At these inputs, an e-bike doesn&apos;t pay back — driving
+                  costs avoided don&apos;t exceed the e-bike&apos;s
+                  electricity and upkeep costs. Try raising daily miles or
+                  the replaceable percentage.
+                </p>
+              )}
+              <RoiChart
+                data={result.cumulativeByMonth}
+                paybackMonths={result.paybackMonths}
+              />
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-line p-6 text-sm text-ink/80 space-y-1">
+              <h3 className="font-display text-base font-medium tracking-tight text-ink mb-2">
+                Behind the numbers
+              </h3>
+              <Row
+                label="Car fuel cost per mile"
+                value={`$${result.carFuelCostPerMile.toFixed(3)}`}
+              />
+              <Row
+                label="Car ownership cost per mile"
+                value={`$${result.carOwnershipCostPerMile.toFixed(3)}`}
+              />
+              <Row
+                label="Car cost per mile (total)"
+                value={`$${result.carCostPerMile.toFixed(3)}`}
+              />
+              <Row
+                label="E-bike electricity cost per mile"
+                value={`$${result.ebikeCostPerMile.toFixed(3)}`}
+              />
+              <Row
+                label="Savings per replaceable mile"
+                value={`$${result.savingsPerMile.toFixed(3)}`}
+              />
+              <Row
+                label="Replaceable miles / year"
+                value={`${result.annualReplaceableMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} mi`}
+              />
+              <Row
+                label="E-bike upkeep per year"
+                value={formatUsd(result.ebikeAnnualUpkeep)}
+              />
+              <Row
+                label="Car CO₂ per mile"
+                value={`${result.carCo2PerMile.toFixed(2)} lbs`}
+              />
+              <Row
+                label="E-bike CO₂ per mile"
+                value={`${result.ebikeCo2PerMile.toFixed(2)} lbs`}
+              />
+              <Row
+                label="5-year CO₂ avoided"
+                value={formatCo2Lbs(result.fiveYearCo2SavedLbs)}
+              />
+            </div>
+          </section>
+        </div>
+
+        <footer className="font-sans text-xs text-faint mt-8">
+          Gas price is what you enter above. Electricity prices are recent
+          residential averages from EIA — your actual rate may be higher or
+          lower; edit the field to match your bill. Car maintenance,
+          insurance, depreciation, and registration are estimated with an
+          AAA-style national average per mile, applied only to the miles an
+          e-bike replaces; e-bike upkeep assumes routine maintenance and
+          optional insurance. Edit both under &ldquo;Show advanced&rdquo; to
+          match your situation. CO₂ avoided uses EPA&apos;s
+          gallon-of-gasoline factor for the car and a national-average grid
+          intensity for e-bike charging; your local grid mix may be cleaner
+          or dirtier.
+        </footer>
+      </div>
+    </main>
+  );
+}
+
+function Field({
+  id,
+  label,
+  suffix,
+  caption,
+  children,
+}: {
+  id: string;
+  label: string;
+  suffix?: string;
+  caption?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1">
+        <label htmlFor={id} className="font-sans text-sm font-medium text-ink">
+          {label}
+        </label>
+        {suffix && <span className="font-sans text-xs text-faint">{suffix}</span>}
+      </div>
+      {children}
+      {caption && <p className="mt-1 font-sans text-xs text-faint">{caption}</p>}
+    </div>
+  );
+}
+
+function NumInput({
+  id,
+  value,
+  onChange,
+  step = 1,
+  min,
+}: {
+  id: string;
+  value: number;
+  onChange: (n: number) => void;
+  step?: number;
+  min?: number;
+}) {
+  return (
+    <input
+      id={id}
+      type="number"
+      value={Number.isFinite(value) ? value : 0}
+      step={step}
+      min={min}
+      onChange={(e) => {
+        const n = parseFloat(e.target.value);
+        const clamped = min !== undefined ? Math.max(min, n) : n;
+        onChange(Number.isFinite(clamped) ? clamped : 0);
+      }}
+      className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+    />
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "good" | "bad";
+}) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-line p-5">
+      <div className="font-sans text-xs uppercase tracking-wide text-faint">{label}</div>
+      <div
+        className={`mt-1 font-display text-2xl font-medium tracking-tight ${
+          tone === "good" ? "text-ink" : "text-accent"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="font-sans text-muted">{label}</span>
+      <span className="font-mono text-ink">{value}</span>
+    </div>
+  );
+}

@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+/*
+  Design tokens shared with mzrascoff.com's editorial system — warm paper
+  background, ink text, a single restrained oxblood accent. Fraunces for
+  display, Newsreader for reading, Inter for small UI labels.
+*/
+@theme {
+  --color-paper: #faf7f2;
+  --color-paper-deep: #f3ede3;
+  --color-ink: #1a1814;
+  --color-muted: #6b6358;
+  --color-faint: #726858;
+  --color-line: #e3dccf;
+  --color-accent: #7a2e2e;
+  --color-accent-soft: #a85a4a;
+
+  --font-display: var(--font-fraunces);
+  --font-serif: var(--font-newsreader);
+  --font-sans: var(--font-inter);
+}
+
+@layer base {
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-serif), Georgia, serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: #e7d9c8;
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+}
+
+@layer utilities {
+  .eyebrow {
+    font-family: var(--font-sans), system-ui, sans-serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--color-accent);
+  }
+}

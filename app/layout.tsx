@@ -21,10 +21,27 @@ const inter = Inter({
   display: "swap",
 });
 
+const title = "E-Bike ROI Calculator";
+const description =
+  "When does an e-bike pay back versus driving? Enter your own gas price, get state-aware electricity defaults, and see a payback chart.";
+
 export const metadata: Metadata = {
-  title: "E-Bike ROI Calculator",
-  description:
-    "When does an e-bike pay back versus driving? Enter your own gas price, get state-aware electricity defaults, and see a payback chart.",
+  metadataBase: new URL("https://ebike-roi.vercel.app"),
+  title,
+  description,
+  openGraph: {
+    title,
+    description,
+    url: "/",
+    siteName: title,
+    type: "website",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+    title,
+    description,
+  },
 };
 
 export default function RootLayout({

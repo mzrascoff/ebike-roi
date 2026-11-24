@@ -127,6 +127,12 @@ describe("formatPayback", () => {
     expect(formatPayback(30)).toBe("2y 6mo");
     expect(formatPayback(24)).toBe("2 years");
   });
+
+  it("rounds to whole months before splitting into years", () => {
+    expect(formatPayback(35.6)).toBe("3 years");
+    expect(formatPayback(47.5)).toBe("4 years");
+    expect(formatPayback(35.4)).toBe("2y 11mo");
+  });
 });
 
 describe("formatUsd", () => {
@@ -144,8 +150,8 @@ describe("formatCo2Lbs", () => {
     expect(formatCo2Lbs(0)).toBe("0 lbs CO₂");
   });
 
-  it("formats amounts at or above 2000 lbs in tons", () => {
-    expect(formatCo2Lbs(2000)).toBe("1.0 tons CO₂");
-    expect(formatCo2Lbs(5500)).toBe("2.8 tons CO₂");
+  it("formats amounts at or above 2000 lbs in short tons", () => {
+    expect(formatCo2Lbs(2000)).toBe("1.0 short tons CO₂");
+    expect(formatCo2Lbs(5500)).toBe("2.8 short tons CO₂");
   });
 });

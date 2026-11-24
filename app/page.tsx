@@ -14,10 +14,12 @@ export default function Page() {
   // null = follow the state's default; a number once the user hand-edits it,
   // so switching states later doesn't clobber their edit.
   const [kwhPriceOverride, setKwhPriceOverride] = useState<number | null>(null);
-  const kwhPrice = kwhPriceOverride ?? getState(stateCode)?.kwhPrice ?? 0.16;
+  const stateName = getState(stateCode)?.name ?? "your state";
+  const stateKwhPrice = getState(stateCode)?.kwhPrice ?? 0.16;
+  const kwhPrice = kwhPriceOverride ?? stateKwhPrice;
   const [dailyMiles, setDailyMiles] = useState<number>(15);
   const [replaceablePct, setReplaceablePct] = useState<number>(70); // percent
-  const [daysPerWeek, setDaysPerWeek] = useState<5 | 6 | 7>(7);
+  const [daysPerWeek, setDaysPerWeek] = useState<number>(7);
   const [whPerMile, setWhPerMile] = useState<number>(20);
   const [carOwnershipCostPerMile, setCarOwnershipCostPerMile] = useState<number>(0.5);
   const [ebikeAnnualUpkeep, setEbikeAnnualUpkeep] = useState<number>(150);
@@ -96,34 +98,51 @@ export default function Page() {
               suffix="$/gal"
               caption="What you're currently paying per gallon."
             >
-              <NumInput id="gas-price" value={gasPrice} step={0.01} min={0} onChange={setGasPrice} />
+              <NumInput id="gas-price" value={gasPrice} step={0.01} min={0} max={20} onChange={setGasPrice} />
             </Field>
 
             <Field id="mpg" label="Car fuel economy" suffix="MPG">
-              <NumInput id="mpg" value={mpg} step={1} min={1} onChange={setMpg} />
+              <NumInput id="mpg" value={mpg} step={1} min={1} max={150} onChange={setMpg} />
             </Field>
 
             <Field id="ebike-price" label="E-bike price" suffix="$">
-              <NumInput id="ebike-price" value={ebikePrice} step={50} min={0} onChange={setEbikePrice} />
+              <NumInput id="ebike-price" value={ebikePrice} step={50} min={0} max={20000} onChange={setEbikePrice} />
             </Field>
 
             <Field
               id="kwh-price"
               label="Electricity price"
               suffix="$/kWh"
-              caption={`Pre-filled with the residential average for ${getState(stateCode)?.name ?? "your state"}.`}
+              caption={
+                kwhPriceOverride === null ? (
+                  `Pre-filled with the residential average for ${stateName}.`
+                ) : (
+                  <>
+                    Your rate. The residential average for {stateName} is $
+                    {stateKwhPrice.toFixed(3)}/kWh.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setKwhPriceOverride(null)}
+                      className="text-accent underline hover:text-accent-soft"
+                    >
+                      Reset to state average
+                    </button>
+                  </>
+                )
+              }
             >
               <NumInput
                 id="kwh-price"
                 value={kwhPrice}
                 step={0.01}
                 min={0}
+                max={2}
                 onChange={setKwhPriceOverride}
               />
             </Field>
 
             <Field id="daily-miles" label="Daily miles driven" suffix="mi/day">
-              <NumInput id="daily-miles" value={dailyMiles} step={1} min={0} onChange={setDailyMiles} />
+              <NumInput id="daily-miles" value={dailyMiles} step={1} min={0} max={200} onChange={setDailyMiles} />
             </Field>
 
             <Field
@@ -144,12 +163,13 @@ export default function Page() {
 
             <Field id="days-per-week" label="Days per week">
               <div className="inline-flex rounded-md border border-line overflow-hidden">
-                {[5, 6, 7].map((d) => (
+                {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                   <button
                     key={d}
                     type="button"
-                    onClick={() => setDaysPerWeek(d as 5 | 6 | 7)}
-                    className={`px-4 py-2 font-sans text-sm ${
+                    aria-pressed={daysPerWeek === d}
+                    onClick={() => setDaysPerWeek(d)}
+                    className={`px-3 py-2 font-sans text-sm sm:px-4 ${
                       daysPerWeek === d
                         ? "bg-accent text-white"
                         : "bg-white text-ink/80 hover:bg-paper-deep"
@@ -176,7 +196,7 @@ export default function Page() {
                   suffix="Wh/mi"
                   caption="A typical e-bike uses ~15–25 Wh per mile."
                 >
-                  <NumInput id="wh-per-mile" value={whPerMile} step={1} min={1} onChange={setWhPerMile} />
+                  <NumInput id="wh-per-mile" value={whPerMile} step={1} min={1} max={100} onChange={setWhPerMile} />
                 </Field>
 
                 <Field
@@ -190,6 +210,7 @@ export default function Page() {
                     value={carOwnershipCostPerMile}
                     step={0.01}
                     min={0}
+                    max={5}
                     onChange={setCarOwnershipCostPerMile}
                   />
                 </Field>
@@ -205,6 +226,7 @@ export default function Page() {
                     value={ebikeAnnualUpkeep}
                     step={10}
                     min={0}
+                    max={5000}
                     onChange={setEbikeAnnualUpkeep}
                   />
                 </Field>
@@ -337,7 +359,7 @@ function Field({
   id: string;
   label: string;
   suffix?: string;
-  caption?: string;
+  caption?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -354,30 +376,63 @@ function Field({
   );
 }
 
+// Parses a number field's text; null for empty or not-a-number input.
+function parseNum(text: string): number | null {
+  if (text.trim() === "") return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Keeps the raw text as a draft so the field can be cleared or hold a
+// partial entry ("", "-", "1e") while typing. Only finite, in-range values
+// reach the math; on blur the field is clamped to min/max, or restored to
+// the last valid value if it was left empty or invalid.
 function NumInput({
   id,
   value,
   onChange,
   step = 1,
   min,
+  max,
 }: {
   id: string;
   value: number;
   onChange: (n: number) => void;
   step?: number;
   min?: number;
+  max?: number;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  const [shownValue, setShownValue] = useState(value);
+  // The value changed from outside (e.g. a new state's electricity price):
+  // show it, unless the draft already says the same number.
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (parseNum(draft) !== value) setDraft(String(value));
+  }
+
+  const clamp = (n: number) =>
+    Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n));
+
   return (
     <input
       id={id}
       type="number"
-      value={Number.isFinite(value) ? value : 0}
+      inputMode="decimal"
+      value={draft}
       step={step}
       min={min}
+      max={max}
       onChange={(e) => {
-        const n = parseFloat(e.target.value);
-        const clamped = min !== undefined ? Math.max(min, n) : n;
-        onChange(Number.isFinite(clamped) ? clamped : 0);
+        setDraft(e.target.value);
+        const n = parseNum(e.target.value);
+        if (n !== null && n === clamp(n)) onChange(n);
+      }}
+      onBlur={() => {
+        const n = parseNum(draft);
+        const next = n === null ? value : clamp(n);
+        setDraft(String(next));
+        if (next !== value) onChange(next);
       }}
       className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
     />

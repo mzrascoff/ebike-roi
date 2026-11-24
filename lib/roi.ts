@@ -107,8 +107,10 @@ export function formatPayback(months: number | null): string {
   if (months === null || !isFinite(months)) return "Never";
   if (months < 1) return "< 1 month";
   if (months < 24) return `${months.toFixed(1)} months`;
-  const years = Math.floor(months / 12);
-  const remMonths = Math.round(months - years * 12);
+  // Round to whole months before splitting, so 35.6 reads "3 years", not "2y 12mo".
+  const totalMonths = Math.round(months);
+  const years = Math.floor(totalMonths / 12);
+  const remMonths = totalMonths % 12;
   if (remMonths === 0) return `${years} years`;
   return `${years}y ${remMonths}mo`;
 }
@@ -129,7 +131,7 @@ export function formatCo2Lbs(lbs: number): string {
     return `${sign}${(abs / 2000).toLocaleString(undefined, {
       minimumFractionDigits: 1,
       maximumFractionDigits: 1,
-    })} tons CO₂`;
+    })} short tons CO₂`;
   }
   return `${sign}${abs.toLocaleString(undefined, {
     maximumFractionDigits: 0,

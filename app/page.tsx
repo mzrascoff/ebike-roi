@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { STATES, getState } from "@/lib/states";
-import { computeRoi, formatCo2Lbs, formatPayback, formatUsd } from "@/lib/roi";
+import {
+  computeRoi,
+  DEFAULT_CAR_FIXED_ANNUAL_COST,
+  DEFAULT_CAR_VARIABLE_COST_PER_MILE,
+  formatCo2Lbs,
+  formatPayback,
+  formatUsd,
+} from "@/lib/roi";
 import RoiChart from "@/components/RoiChart";
 
 export default function Page() {
@@ -21,7 +28,13 @@ export default function Page() {
   const [replaceablePct, setReplaceablePct] = useState<number>(70); // percent
   const [daysPerWeek, setDaysPerWeek] = useState<number>(7);
   const [whPerMile, setWhPerMile] = useState<number>(20);
-  const [carOwnershipCostPerMile, setCarOwnershipCostPerMile] = useState<number>(0.5);
+  const [carVariableCostPerMile, setCarVariableCostPerMile] = useState<number>(
+    DEFAULT_CAR_VARIABLE_COST_PER_MILE,
+  );
+  const [ditchCar, setDitchCar] = useState<boolean>(false);
+  const [carFixedAnnualCost, setCarFixedAnnualCost] = useState<number>(
+    DEFAULT_CAR_FIXED_ANNUAL_COST,
+  );
   const [ebikeAnnualUpkeep, setEbikeAnnualUpkeep] = useState<number>(150);
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
@@ -36,7 +49,9 @@ export default function Page() {
         dailyMiles,
         replaceablePct: replaceablePct / 100,
         daysPerWeek,
-        carOwnershipCostPerMile,
+        carVariableCostPerMile,
+        ditchCar,
+        carFixedAnnualCost,
         ebikeAnnualUpkeep,
       }),
     [
@@ -48,7 +63,9 @@ export default function Page() {
       dailyMiles,
       replaceablePct,
       daysPerWeek,
-      carOwnershipCostPerMile,
+      carVariableCostPerMile,
+      ditchCar,
+      carFixedAnnualCost,
       ebikeAnnualUpkeep,
     ],
   );
@@ -64,9 +81,9 @@ export default function Page() {
             E-Bike ROI Calculator
           </h1>
           <p className="mt-4 max-w-2xl font-serif text-lg leading-relaxed text-muted">
-            How long until an e-bike pays for itself in saved gas,
-            maintenance, insurance, and depreciation? Pick your state, tune
-            the inputs, and watch the payback line.
+            How long until an e-bike pays for itself in saved gas, wear and
+            tear, and mileage-driven depreciation? Pick your state, tune the
+            inputs, and watch the payback line.
           </p>
         </header>
 
@@ -181,6 +198,45 @@ export default function Page() {
               </div>
             </Field>
 
+            <div>
+              <label
+                htmlFor="ditch-car"
+                className="flex items-start gap-3 font-sans text-sm font-medium text-ink"
+              >
+                <input
+                  id="ditch-car"
+                  type="checkbox"
+                  checked={ditchCar}
+                  onChange={(e) => setDitchCar(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-accent"
+                />
+                I&apos;ll get rid of a car
+              </label>
+              <p className="mt-1 pl-7 font-sans text-xs text-faint">
+                Insurance, registration, financing, and most depreciation
+                don&apos;t shrink when you drive less. They only count as
+                savings if a car leaves the household.
+              </p>
+            </div>
+
+            {ditchCar && (
+              <Field
+                id="car-fixed-cost"
+                label="Fixed cost of that car"
+                suffix="$/year"
+                caption="AAA 2026 average for a new car: insurance, registration and taxes, financing, and the depreciation that happens regardless of miles. Lower it for an older, paid-off car."
+              >
+                <NumInput
+                  id="car-fixed-cost"
+                  value={carFixedAnnualCost}
+                  step={100}
+                  min={0}
+                  max={50000}
+                  onChange={setCarFixedAnnualCost}
+                />
+              </Field>
+            )}
+
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
@@ -200,18 +256,18 @@ export default function Page() {
                 </Field>
 
                 <Field
-                  id="car-ownership-cost"
-                  label="Car ownership cost"
+                  id="car-variable-cost"
+                  label="Car per-mile cost, beyond fuel"
                   suffix="$/mi"
-                  caption="AAA-style national average for maintenance, insurance, depreciation, and registration — beyond fuel. Applied only to the miles an e-bike replaces."
+                  caption="Only costs that scale with miles: maintenance, repairs, and tires (AAA 2026: 11.7¢) plus mileage-driven depreciation (8.4¢). Applied to the miles an e-bike replaces."
                 >
                   <NumInput
-                    id="car-ownership-cost"
-                    value={carOwnershipCostPerMile}
+                    id="car-variable-cost"
+                    value={carVariableCostPerMile}
                     step={0.01}
                     min={0}
                     max={5}
-                    onChange={setCarOwnershipCostPerMile}
+                    onChange={setCarVariableCostPerMile}
                   />
                 </Field>
 
@@ -266,8 +322,9 @@ export default function Page() {
               {paysBack ? (
                 <p className="text-sm text-muted mb-3">
                   Crossing the dashed line at $0 is when the e-bike has paid
-                  for itself in fuel, maintenance, insurance, and
-                  depreciation savings, net of its own upkeep.
+                  for itself in fuel, wear-and-tear, and depreciation
+                  savings{ditchCar ? ", plus the fixed costs of the car you give up," : ","}{" "}
+                  net of its own upkeep.
                 </p>
               ) : (
                 <p className="text-sm text-accent mb-3">
@@ -292,11 +349,11 @@ export default function Page() {
                 value={`$${result.carFuelCostPerMile.toFixed(3)}`}
               />
               <Row
-                label="Car ownership cost per mile"
-                value={`$${result.carOwnershipCostPerMile.toFixed(3)}`}
+                label="Car wear + depreciation / mi"
+                value={`$${result.carVariableCostPerMile.toFixed(3)}`}
               />
               <Row
-                label="Car cost per mile (total)"
+                label="Car variable cost / mi (total)"
                 value={`$${result.carCostPerMile.toFixed(3)}`}
               />
               <Row
@@ -310,6 +367,10 @@ export default function Page() {
               <Row
                 label="Replaceable miles / year"
                 value={`${result.annualReplaceableMiles.toLocaleString(undefined, { maximumFractionDigits: 0 })} mi`}
+              />
+              <Row
+                label="Fixed car costs saved / yr"
+                value={formatUsd(result.carFixedAnnualSavings)}
               />
               <Row
                 label="E-bike upkeep per year"
@@ -334,12 +395,21 @@ export default function Page() {
         <footer className="font-sans text-xs text-faint mt-8">
           Gas price is what you enter above. Electricity prices are recent
           residential averages from EIA — your actual rate may be higher or
-          lower; edit the field to match your bill. Car maintenance,
-          insurance, depreciation, and registration are estimated with an
-          AAA-style national average per mile, applied only to the miles an
-          e-bike replaces; e-bike upkeep assumes routine maintenance and
-          optional insurance. Edit both under &ldquo;Show advanced&rdquo; to
-          match your situation. CO₂ avoided uses EPA&apos;s
+          lower; edit the field to match your bill. Beyond fuel, only car
+          costs that actually rise with mileage are counted per replaced
+          mile: maintenance, repairs, and tires plus the mileage-driven part
+          of depreciation, about $0.20/mi from{" "}
+          <a
+            href="https://newsroom.aaa.com/wp-content/uploads/2026/09/8-YDC-Brochure_2026-1.pdf"
+            className="underline hover:text-accent"
+          >
+            AAA&apos;s 2026 Your Driving Costs
+          </a>
+          . Insurance, registration, financing, and the rest of depreciation
+          are fixed, so they count only if you check &ldquo;I&apos;ll get rid
+          of a car&rdquo; (default $7,250/year, AAA&apos;s new-car average).
+          E-bike upkeep assumes routine maintenance and optional insurance.
+          Edit these to match your situation. CO₂ avoided uses EPA&apos;s
           gallon-of-gasoline factor for the car and a national-average grid
           intensity for e-bike charging; your local grid mix may be cleaner
           or dirtier.
@@ -464,7 +534,7 @@ function StatCard({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
+    <div className="flex justify-between gap-3">
       <span className="font-sans text-muted">{label}</span>
       <span className="font-mono text-ink">{value}</span>
     </div>

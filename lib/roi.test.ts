@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   computeRoi,
+  DEFAULT_CAR_FIXED_ANNUAL_COST,
+  DEFAULT_CAR_VARIABLE_COST_PER_MILE,
   formatCo2Lbs,
   formatPayback,
   formatUsd,
@@ -16,7 +18,9 @@ const baseInputs: Inputs = {
   dailyMiles: 15,
   replaceablePct: 0.7,
   daysPerWeek: 7,
-  carOwnershipCostPerMile: 0.5,
+  carVariableCostPerMile: DEFAULT_CAR_VARIABLE_COST_PER_MILE,
+  ditchCar: false,
+  carFixedAnnualCost: DEFAULT_CAR_FIXED_ANNUAL_COST,
   ebikeAnnualUpkeep: 150,
 };
 
@@ -26,7 +30,7 @@ describe("computeRoi", () => {
 
     const expectedCarFuelCostPerMile = baseInputs.gasPrice / baseInputs.mpg;
     const expectedCarCostPerMile =
-      expectedCarFuelCostPerMile + baseInputs.carOwnershipCostPerMile;
+      expectedCarFuelCostPerMile + baseInputs.carVariableCostPerMile;
     const expectedEbikeCostPerMile = (baseInputs.whPerMile / 1000) * baseInputs.kwhPrice;
     const expectedAnnualMiles =
       baseInputs.dailyMiles * baseInputs.replaceablePct * baseInputs.daysPerWeek * 52;
@@ -35,6 +39,7 @@ describe("computeRoi", () => {
     expect(result.carCostPerMile).toBeCloseTo(expectedCarCostPerMile);
     expect(result.ebikeCostPerMile).toBeCloseTo(expectedEbikeCostPerMile);
     expect(result.annualReplaceableMiles).toBeCloseTo(expectedAnnualMiles);
+    expect(result.carFixedAnnualSavings).toBe(0);
     expect(result.grossAnnualSavings).toBeCloseTo(
       result.savingsPerMile * expectedAnnualMiles,
     );
@@ -60,7 +65,7 @@ describe("computeRoi", () => {
       ...baseInputs,
       gasPrice: 0.01,
       kwhPrice: 5,
-      carOwnershipCostPerMile: 0,
+      carVariableCostPerMile: 0,
     });
 
     expect(result.savingsPerMile).toBeLessThanOrEqual(0);
@@ -69,7 +74,49 @@ describe("computeRoi", () => {
     expect(result.fiveYearNet).toBeLessThan(0);
   });
 
-  it("subtracts e-bike upkeep from gross fuel-and-ownership savings", () => {
+  it("pins the default figures to the documented AAA 2026 derivation", () => {
+    // 11.73¢ maintenance/repair/tires + $419 / 5,000 mi of depreciation.
+    expect(DEFAULT_CAR_VARIABLE_COST_PER_MILE).toBeCloseTo(0.1173 + 419 / 5000, 2);
+    // Insurance + registration/taxes + finance + depreciation net of its
+    // mileage-driven part at 15k mi/yr.
+    expect(DEFAULT_CAR_FIXED_ANNUAL_COST).toBeCloseTo(
+      2098 + 802 + 1184 + (4422 - 15000 * (419 / 5000)),
+      -1,
+    );
+  });
+
+  it("only counts fixed ownership costs when the household gets rid of a car", () => {
+    const keep = computeRoi(baseInputs);
+    const ditch = computeRoi({ ...baseInputs, ditchCar: true });
+
+    expect(keep.carFixedAnnualSavings).toBe(0);
+    expect(ditch.carFixedAnnualSavings).toBe(baseInputs.carFixedAnnualCost);
+    expect(ditch.perMileAnnualSavings).toBeCloseTo(keep.perMileAnnualSavings);
+    expect(ditch.grossAnnualSavings).toBeCloseTo(
+      keep.grossAnnualSavings + baseInputs.carFixedAnnualCost,
+    );
+    expect(ditch.annualSavings).toBeCloseTo(
+      keep.annualSavings + baseInputs.carFixedAnnualCost,
+    );
+    expect(ditch.paybackMonths!).toBeLessThan(keep.paybackMonths!);
+
+    // Editing the fixed cost has no effect unless the car goes away.
+    const keepEdited = computeRoi({ ...baseInputs, carFixedAnnualCost: 99999 });
+    expect(keepEdited.annualSavings).toBeCloseTo(keep.annualSavings);
+  });
+
+  it("reproduces the default scenario's headline numbers", () => {
+    // 15 mi/day × 70% × 7 days × 52 weeks = 3,822 mi/yr at California's $0.305/kWh.
+    const result = computeRoi({ ...baseInputs, kwhPrice: 0.305 });
+    const savingsPerMile = 4.5 / 28 + 0.2 - 0.02 * 0.305;
+    const annual = savingsPerMile * 3822 - 150;
+
+    expect(result.annualSavings).toBeCloseTo(annual);
+    expect(result.paybackMonths).toBeCloseTo(2000 / (annual / 12));
+    expect(result.fiveYearNet).toBeCloseTo(annual * 5 - 2000);
+  });
+
+  it("subtracts e-bike upkeep from gross driving-cost savings", () => {
     const withUpkeep = computeRoi(baseInputs);
     const withoutUpkeep = computeRoi({ ...baseInputs, ebikeAnnualUpkeep: 0 });
 
@@ -82,7 +129,7 @@ describe("computeRoi", () => {
   });
 
   it("guards against division by zero when mpg is 0", () => {
-    const result = computeRoi({ ...baseInputs, mpg: 0, carOwnershipCostPerMile: 0 });
+    const result = computeRoi({ ...baseInputs, mpg: 0, carVariableCostPerMile: 0 });
 
     expect(result.carFuelCostPerMile).toBe(0);
     expect(result.carCostPerMile).toBe(0);

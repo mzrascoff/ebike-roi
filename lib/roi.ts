@@ -7,7 +7,13 @@ export interface Inputs {
   dailyMiles: number; // total daily driving
   replaceablePct: number; // 0–1
   daysPerWeek: number; // 1–7
-  carOwnershipCostPerMile: number; // $/mi — maintenance, insurance, depreciation, registration
+  // $/mi of non-fuel car cost that actually scales with miles driven:
+  // maintenance, repairs, tires, and the mileage-driven part of depreciation.
+  carVariableCostPerMile: number;
+  // When true, the household gets rid of a car, so its fixed annual costs
+  // (insurance, registration/taxes, fixed depreciation, financing) are saved.
+  ditchCar: boolean;
+  carFixedAnnualCost: number; // $/year, only counted when ditchCar is true
   ebikeAnnualUpkeep: number; // $/year — maintenance + optional insurance
 }
 
@@ -18,11 +24,13 @@ export interface MonthPoint {
 
 export interface Result {
   carFuelCostPerMile: number;
-  carOwnershipCostPerMile: number;
+  carVariableCostPerMile: number;
   carCostPerMile: number;
   ebikeCostPerMile: number;
   savingsPerMile: number;
   annualReplaceableMiles: number;
+  perMileAnnualSavings: number;
+  carFixedAnnualSavings: number;
   grossAnnualSavings: number;
   ebikeAnnualUpkeep: number;
   annualSavings: number;
@@ -43,6 +51,24 @@ const CO2_LBS_PER_GALLON_GASOLINE = 19.6;
 // approximation, same spirit as the whPerMile default.
 const CO2_LBS_PER_KWH_GRID = 0.85;
 
+// Defaults from AAA "Your Driving Costs" 2026, weighted average of all
+// vehicle categories (5 years / 75,000 miles):
+//   https://newsroom.aaa.com/wp-content/uploads/2026/09/8-YDC-Brochure_2026-1.pdf
+// Variable, per mile:
+//   maintenance, repair & tires                    11.73¢/mi
+//   mileage-driven depreciation: $419/yr less when
+//   driving 10k instead of 15k mi/yr = $419 / 5,000  8.38¢/mi
+//   total                                          ≈ 20¢/mi
+// Fixed, per year (only saved if the car goes away):
+//   full-coverage insurance                        $2,098
+//   license, registration & taxes                    $802
+//   finance charges                                $1,184
+//   fixed depreciation: $4,422 at 15k mi/yr
+//     minus 15,000 × 8.38¢ mileage-driven part     $3,165
+//   total                                          ≈ $7,250
+export const DEFAULT_CAR_VARIABLE_COST_PER_MILE = 0.2;
+export const DEFAULT_CAR_FIXED_ANNUAL_COST = 7250;
+
 export function computeRoi(input: Inputs): Result {
   const {
     ebikePrice,
@@ -53,17 +79,23 @@ export function computeRoi(input: Inputs): Result {
     dailyMiles,
     replaceablePct,
     daysPerWeek,
-    carOwnershipCostPerMile,
+    carVariableCostPerMile,
+    ditchCar,
+    carFixedAnnualCost,
     ebikeAnnualUpkeep,
   } = input;
 
   const carFuelCostPerMile = mpg > 0 ? gasPrice / mpg : 0;
-  const carCostPerMile = carFuelCostPerMile + carOwnershipCostPerMile;
+  const carCostPerMile = carFuelCostPerMile + carVariableCostPerMile;
   const ebikeCostPerMile = (whPerMile / 1000) * kwhPrice;
   const savingsPerMile = carCostPerMile - ebikeCostPerMile;
   const annualReplaceableMiles =
     dailyMiles * replaceablePct * daysPerWeek * 52;
-  const grossAnnualSavings = savingsPerMile * annualReplaceableMiles;
+  const perMileAnnualSavings = savingsPerMile * annualReplaceableMiles;
+  // Fixed costs don't shrink when you drive less; they're only saved if a
+  // car leaves the household.
+  const carFixedAnnualSavings = ditchCar ? carFixedAnnualCost : 0;
+  const grossAnnualSavings = perMileAnnualSavings + carFixedAnnualSavings;
   const annualSavings = grossAnnualSavings - ebikeAnnualUpkeep;
   const monthlySavings = annualSavings / 12;
 
@@ -84,11 +116,13 @@ export function computeRoi(input: Inputs): Result {
 
   return {
     carFuelCostPerMile,
-    carOwnershipCostPerMile,
+    carVariableCostPerMile,
     carCostPerMile,
     ebikeCostPerMile,
     savingsPerMile,
     annualReplaceableMiles,
+    perMileAnnualSavings,
+    carFixedAnnualSavings,
     grossAnnualSavings,
     ebikeAnnualUpkeep,
     annualSavings,
